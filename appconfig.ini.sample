@@ -1,0 +1,18 @@
+[app]
+name = Links
+cookie_name = _linksessid
+root_dir = /opt/webapp/dir
+login_page = /opt/webapp/dir/html/login.html
+
+[database]
+#host = localhost
+#port = 5432
+user = sampleuser
+password = sampleuser
+
+[userspace]
+name = SAMPLEAPP
+
+[smtp]
+host = mailhost.zen.co.uk
+port = 465

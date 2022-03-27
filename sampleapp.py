@@ -3,17 +3,28 @@ import bottle
 from pgusers import UserSpace
 from userapp import WebApp
 
+config = """
+[app]
+name = SAMPLE
+cookie_name = sample_session_id
+root_dir = /opt/webapp/dir
+#login_page = /opt/webapp/dir/html/login.html
 
-ussp = UserSpace(database="SAMPLE",
-                user="sampleuser",
-                password="sampleuser",
-                host="localhost")
+[database]
+host = localhost
+port = 5432
+user = sampleuser
+password = sampleuser
 
-if not ussp.find_user(username="paco"):
-    ussp.create_user("paco", "porro23", "paco@perro.pi", {})
+[userspace]
+name = SAMPLE
 
-sample = WebApp(cookie="sample_session_id")
-sample.set_userspace(ussp)
+[smtp]
+host = mailhost.zen.co.uk
+port = 465
+"""
+
+sample = WebApp(config=config.split("\n"))
 
 @sample.get("/hello/<name>")
 @sample.authenticated

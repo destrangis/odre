@@ -1,4 +1,5 @@
 import pathlib
+from configparser import ConfigParser
 
 import bottle
 
@@ -63,54 +64,54 @@ class WebApp(bottle.Bottle):
         """
         Initialises a WebApp object
         Optional keyword arguments:
-        rootdir [pathlib.Path] - The root directory of the application
-                                  where it can get it's configuration,
-                                  files, etc.
-        userspace [pgusers.UserSpace] - The userspace. Default None.
-        appname [str] - A name for the app. By default the same as the
-                         dbname in the userspace or "" if no userspace
-        cookiename [str] - A name of a cookie on which to store authentication key.
-                        If not specified, when a user is authenticated the key
-                        is returned on a JSON response and the user is expected
-                        to send further requests using the key in a header as in
-                        Authorization: Bearer <key>
+        config - an iterable yielding strings (e.g. an open file) or None
+        config_file_name - a configuration file name, used if config is None
+
+        if none of the optional arguments are given, the app must be configured
+        using the configure() method
         """
-        self.userspace = kwargs.pop("userspace", None)
-        self.appname = kwargs.pop("appname", self.userspace.dbname if self.userspace else "")
-        self.cookie_name = kwargs.pop("cookie", None)
-        self.rootdir = pathlib.Path(__file__).parent
+        cp = None
+        conf = kwargs.pop("config", None)
+        configfile = kwargs.pop("configfile", None)
+        if conf or configfile:
+            cp = ConfigParser()
 
         super().__init__(*args, **kwargs)
         self.route("/login", method="POST", callback=self.post_login)
 
+        if conf is not None:
+            cp.read_file(conf)
+        elif configfile is not None:
+            p = pathlib.Path(configfile)
+            with p.open() as cf:
+                cp.read_file(cf)
 
-    def set_rootdir(self, dir):
-        """
-        Set the rootdir to something different from the default.
-        """
-        self.rootdir = pathlib.Path(dir)
-
-
-    def set_userspace(self, usp):
-        """
-        Set the userspace
-        """
-        # if isinstance(usp, str):
-            # self.userspace = pgusers.UserSpace(database=usp)
-            # self.appname = usp
-        if isinstance(usp, UserSpace):
-            self.userspace = usp
-            self.appname = usp.dbname
-        else:
-            raise BadUserspaceError("set_userspace: Expected UserSpace. "
-                        f"Got [{usp.__class__.__name__}]:{repr(usp)}")
+        if cp:
+            self.configure(cp)
 
 
-    def set_appname(self, name):
+    def configure(self, cp):
         """
-        Set the appname
+        Configure the application
+        Args:
+        cp - a ConfigParser object or any mapping object containing the
+             sections with their keys and their values
         """
-        self.appname = name
+        appsection = cp["app"]
+        self.appname = appsection["name"]
+        self.cookie_name = appsection.get("cookie_name", self.appname)
+        self.rootdir = pathlib.Path(appsection["root_dir"])
+        self.login_page = None
+        lf = appsection.get("login_page")
+        if lf:
+            self.login_page = pathlib.Path(lf)
+
+        database = cp["database"]
+        userspace = cp["userspace"]
+        usname = userspace["name"]
+        self.userspace = UserSpace(usname, **database)
+
+        self.smtp = dict(**cp["smtp"])
 
 
     def authenticated(self, callback):
@@ -149,9 +150,8 @@ class WebApp(bottle.Bottle):
         "username", "password", and the hidden field "proceed", which
         is the relative URL to go once the authentication is successful.
         """
-        loginpage = self.rootdir / "html" / "login.html"
-        if loginpage.is_file():
-            with loginpage.open() as lp:
+        if self.login_page and self.login_page.is_file():
+            with self.login_page.open() as lp:
                 loginhtml = lp.read()
         else:
             loginhtml = DEFAULT_LOGIN_HTML
