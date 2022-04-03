@@ -1,6 +1,5 @@
 import bottle
 
-from pgusers import UserSpace
 from userapp import WebApp
 
 config = """
@@ -26,14 +25,17 @@ port = 465
 
 sample = WebApp(config=config.split("\n"))
 
+
 @sample.get("/hello/<name>")
 @sample.authenticated
 def hello(name):
     return f"<p>Hello <b>{name}</b></p>"
 
+
 @sample.get("/")
 def main():
     return "<h3>Hello world</h3>"
+
 
 if __name__ == "__main__":
     bottle.run(sample)
