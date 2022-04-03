@@ -5,11 +5,15 @@ import bottle
 
 from pgusers import UserSpace, OK, NOT_FOUND
 
+
 class UserAppException(Exception):
     pass
 
+
 class BadUserspaceError(UserAppException):
     pass
+
+VERSION = "0.1.0"
 
 
 DEFAULT_LOGIN_HTML = """
@@ -42,6 +46,7 @@ DEFAULT_LOGIN_HTML = """
 </html>
 """
 
+
 class WebApp(bottle.Bottle):
     """
     Web Application class derived from Bottle that includes user
@@ -63,32 +68,34 @@ class WebApp(bottle.Bottle):
     def __init__(self, *args, **kwargs):
         """
         Initialises a WebApp object
-        Optional keyword arguments:
-        config - an iterable yielding strings (e.g. an open file) or None
-        config_file_name - a configuration file name, used if config is None
 
-        if none of the optional arguments are given, the app must be configured
-        using the configure() method
+        Optional keyword arguments:
+        config - Either a filename (str), or an iterable yielding
+                 strings (e.g. an open file) a ConfigParser object, or None
+
+        if config is not given, the app must be configured using the
+        configure() method
         """
         cp = None
         conf = kwargs.pop("config", None)
-        configfile = kwargs.pop("configfile", None)
-        if conf or configfile:
-            cp = ConfigParser()
 
         super().__init__(*args, **kwargs)
         self.route("/login", method="POST", callback=self.post_login)
 
-        if conf is not None:
-            cp.read_file(conf)
-        elif configfile is not None:
-            p = pathlib.Path(configfile)
+        if isinstance(conf, ConfigParser):
+            cp = conf
+        elif isinstance(conf, str):  # conf is a filename
+            cp = ConfigParser()
+            p = pathlib.Path(conf)
             with p.open() as cf:
                 cp.read_file(cf)
+        elif conf is not None:
+            # conf is a file like object or iterable yielding strings
+            cp = ConfigParser()
+            cp.read_file(conf)
 
         if cp:
             self.configure(cp)
-
 
     def configure(self, cp):
         """
@@ -99,8 +106,8 @@ class WebApp(bottle.Bottle):
         """
         appsection = cp["app"]
         self.appname = appsection["name"]
-        self.cookie_name = appsection.get("cookie_name", self.appname)
-        self.rootdir = pathlib.Path(appsection["root_dir"])
+        self.cookie_name = appsection.get("cookie_name", None)
+        self.root_dir = pathlib.Path(appsection["root_dir"])
         self.login_page = None
         lf = appsection.get("login_page")
         if lf:
@@ -113,6 +120,22 @@ class WebApp(bottle.Bottle):
 
         self.smtp = dict(**cp["smtp"])
 
+    def _get_session_data(self):
+        """
+        Get the data associated to the session: username, userid, and
+        any extra data associated to the session
+        """
+        key = ""
+        if self.cookie_name:
+            key = bottle.request.cookies.get(self.cookie_name)
+        else:
+            auth_hdr = bottle.request.headers.get("Authorization", "")
+            if auth_hdr.startswith("Bearer"):
+                key = auth_hdr.split(" ")[1]
+
+        if key:
+            return self.userspace.check_key(key)
+        return NOT_FOUND, "", 0, None
 
     def authenticated(self, callback):
         """
@@ -123,25 +146,28 @@ class WebApp(bottle.Bottle):
         the validity of the key prior to running the callback.
         If not valid, the login method is called.
         """
-        def wrapper(*args, **kwargs):
-            key = ""
-            if self.cookie_name:
-                key = bottle.request.cookies.get(self.cookie_name)
-            else:
-                auth_hdr = bottle.request.headers.get("Authorization", "")
-                if auth_hdr.startswith("Bearer"):
-                    key = auth_hdr.split(" ")[1]
 
-            rc = NOT_FOUND
-            if key:
-                (rc, uname, uid, data) = self.userspace.check_key(key)
+        def wrapper(*args, **kwargs):
+            (rc, uname, uid, data) = self._get_session_data()
             if rc == OK:
                 return callback(*args, **kwargs)
 
             path_info = bottle.request.environ.get("PATH_INFO")
             return self.login(path_info)
+
         return wrapper
 
+    def get_user_data(self):
+        """
+        Find data about a the session user
+        """
+        rc, uname, uid, session_data = self._get_session_data()
+        if rc == OK:
+            udata = self.userspace.find_user(userid=uid)
+            udata["session_data"] = session_data
+            return udata
+
+        return None
 
     def login(self, path):
         """
@@ -157,7 +183,6 @@ class WebApp(bottle.Bottle):
             loginhtml = DEFAULT_LOGIN_HTML
 
         return loginhtml.format(path)
-
 
     def post_login(self, extra=None):
         """
@@ -178,7 +203,7 @@ class WebApp(bottle.Bottle):
             password = bottle.request.forms.get("password", "")
             proceed = bottle.request.forms.get("proceed", "/")
 
-        key, uid = self.userspace.validate_user(username, password, extra)
+        key, admin, uid = self.userspace.validate_user(username, password, extra)
         if key and self.cookie_name:
             bottle.response.set_cookie(self.cookie_name, key)
             bottle.redirect(proceed)
@@ -186,4 +211,6 @@ class WebApp(bottle.Bottle):
         if key:
             return dict(rc=200, text="OK", token_type="Bearer", access_token=key)
         else:
-            raise bottle.HTTPError(status=401, body=f"Bad credentials for user '{username}'")
+            raise bottle.HTTPError(
+                status=401, body=f"Bad credentials for user '{username}'"
+            )
