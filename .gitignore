@@ -1,0 +1,11 @@
+.tox/
+bin/
+build/
+dist/
+lib/
+lib64
+share/
+include/
+pyvenv.cfg
+*.egg-info/
+*~
