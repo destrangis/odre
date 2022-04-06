@@ -1,6 +1,5 @@
-import bottle
-
-from userapp import WebApp
+from bottle import run
+from odre import Odre
 
 config = """
 [app]
@@ -23,7 +22,7 @@ host = mailhost.zen.co.uk
 port = 465
 """
 
-sample = WebApp(config=config.split("\n"))
+sample = Odre(config=config.split("\n"))
 
 
 @sample.get("/hello/<name>")
@@ -38,4 +37,4 @@ def main():
 
 
 if __name__ == "__main__":
-    bottle.run(sample)
+    run(sample)

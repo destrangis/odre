@@ -1,7 +1,6 @@
 boddle
 bottle
 pgusers
-pkg_resources
 black
 tox
 flake8

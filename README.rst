@@ -1,19 +1,19 @@
-==============
-bottle-userapp
-==============
+====
+Odre
+====
 
-Bottle extension that provides user authentication based on the ``pgusers`` module.
+Bottle extension class that provides user authentication based on the ``pgusers`` module.
 
 Usage
 -----
 
-You just need to import the ``WebApp`` object, configure it and then use the ``@authenticated`` decorator on any route you'd like authenticated:
+You just need to import the ``Odre`` object, configure it and then use the ``@authenticated`` decorator on any route you'd like authenticated:
 
 .. code-block:: python
 
-    from bottle_userapp import WebApp
+    from odre import Odre
 
-    sample = WebApp()
+    sample = Odre()
 
     @sample.get("/hello/<name>")
     @sample.authenticated
@@ -59,7 +59,7 @@ The [app] section
 :root_dir:
   The root directory of the application. This is useful to locate the app's resources. Must always be present.
 :login_page:
-  The path to an html file that contains the login page. If omitted, a default login page will be issued, but it will be probably be too basic. The requirements for the login page are that it must send a form with the following fields: ``username``, ``password``, and ``proceed``. The ``proceed`` field must be a hidden file set to ``{0}`` so that the ``WebApp`` can substitute it for the path that was originally requested and, upon a successful login, redirect the user there. Alternatively, the front-end can log-in using the pre-installed ``/login`` route sending username and password in a json object with a ``Content-type`` header set to ``application/json``
+  The path to an html file that contains the login page. If omitted, a default login page will be issued, but it will be probably be too basic. The requirements for the login page are that it must send a form with the following fields: ``username``, ``password``, and ``proceed``. The ``proceed`` field must be a hidden file set to ``{0}`` so that ``Odre`` can substitute it for the path that was originally requested and, upon a successful login, redirect the user there. Alternatively, the front-end can log-in using the pre-installed ``/login`` route sending username and password in a json object with a ``Content-type`` header set to ``application/json``
 
 The [userspace] section
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -87,13 +87,13 @@ This section contains the SMTP server parameters to send the user a *reset passw
 The API
 -------
 
-``app = WebApp(config=None)``
+``app = Odre(config=None)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This is the class constructor. ``WebApp`` is a subclass of ``Bottle``, so all
+This is the class constructor. ``Odre`` is a subclass of ``Bottle``, so all
 of bottle's functionality can be used, but there will be some additional methods
 as well as a pre-installed ``/login`` route. The optional parameter ``config`` to
-the ``WebApp`` class can be used to specify the app configuration_. It can be:
+the ``Odre`` class can be used to specify the app configuration_. It can be:
 
 - A string, which is interpreted as a filename
 - Any iterable yielding strings, e.g. a file-like object
@@ -116,7 +116,7 @@ basic, default login page. Example:
 
 ``app.configure(cp)``
 ~~~~~~~~~~~~~~~~~~~~~
-This method configures the ``WebApp`` object if the ``config`` parameter was not
+This method configures the ``Odre`` object if the ``config`` parameter was not
 specified in the constructor.
 
 The argument ``cp`` must be  ``ConfigParser`` object from the ``configparser``

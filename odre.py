@@ -13,7 +13,8 @@ class UserAppException(Exception):
 class BadUserspaceError(UserAppException):
     pass
 
-VERSION = "0.1.0"
+
+VERSION = "0.9.0"
 
 
 DEFAULT_LOGIN_HTML = """
@@ -47,18 +48,18 @@ DEFAULT_LOGIN_HTML = """
 """
 
 
-class WebApp(bottle.Bottle):
+class Odre(bottle.Bottle):
     """
     Web Application class derived from Bottle that includes user
     authentication based on the pgusers module.
 
-    All WebApp instances include a /login route that performs the
+    All Odre instances include a /login route that performs the
     user authentication.
 
     The class also provides an 'authenticated' decorator to do the
     authentication automatically, e.g:
 
-    myapp = WebApp(userspace=usp)
+    myapp = Odre(userspace=usp)
     @myapp.get("/books/<bookid>")
     @myapp.authenticated
     def get_books(bookid)
@@ -67,7 +68,7 @@ class WebApp(bottle.Bottle):
 
     def __init__(self, *args, **kwargs):
         """
-        Initialises a WebApp object
+        Initialises an Odre object
 
         Optional keyword arguments:
         config - Either a filename (str), or an iterable yielding
