@@ -119,7 +119,7 @@ class Odre(bottle.Bottle):
         usname = userspace["name"]
         self.userspace = UserSpace(usname, **database)
 
-        self.smtp = dict(**cp["smtp"])
+        self.config = cp
 
     def _get_session_data(self):
         """
