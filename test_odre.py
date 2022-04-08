@@ -59,7 +59,8 @@ class TestWebApp(unittest.TestCase):
             "host": "mailhost.domain.com",
             "port": "465",
         }
-        self.assertEqual(wa.smtp, smtp_expected)
+        smtp_section = dict(**wa.config["smtp"])
+        self.assertEqual(smtp_section, smtp_expected)
 
     def test_initialisation_config_iterable(self):
         """We can create Odre with iterable on str configuration"""
