@@ -14,7 +14,7 @@ class BadUserspaceError(UserAppException):
     pass
 
 
-VERSION = "0.9.1"
+VERSION = "0.9.2"
 
 
 DEFAULT_LOGIN_HTML = """
@@ -46,7 +46,23 @@ DEFAULT_LOGIN_HTML = """
   </body>
 </html>
 """
-
+DEFAULT_ERROR_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>BAD CREDENTIALS</title>
+  </head>
+  <body>
+      <div class="container">
+        <h3>Bad credentials</h3>
+        <p>Bad credentials for user '<i>{0}</i>'</p>
+        <br>
+        <p><a href="{1}">Try again</a>
+      </div>
+  </body>
+</html>
+"""
 
 class Odre(bottle.Bottle):
     """
@@ -113,6 +129,10 @@ class Odre(bottle.Bottle):
         lf = appsection.get("login_page")
         if lf:
             self.login_page = pathlib.Path(lf)
+        self.bad_credentials_page = None
+        ep = appsection.get("bad_credentials_page")
+        if ep:
+            self.bad_credentials_page = pathlib.Path(ep)
 
         database = cp["database"]
         userspace = cp["userspace"]
@@ -195,11 +215,13 @@ class Odre(bottle.Bottle):
         content_type = bottle.request.headers["Content-type"]
 
         if content_type == "application/json":
+            json_used = True
             jsn = bottle.request.json
             username = jsn.get("username", "")
             password = jsn.get("password", "")
             proceed = jsn.get("proceed", "/")
         else:
+            json_used = False
             username = bottle.request.forms.get("username", "")
             password = bottle.request.forms.get("password", "")
             proceed = bottle.request.forms.get("proceed", "/")
@@ -211,7 +233,14 @@ class Odre(bottle.Bottle):
 
         if key:
             return dict(rc=200, text="OK", token_type="Bearer", access_token=key)
-        else:
+        if json_used:
             raise bottle.HTTPError(
                 status=401, body=f"Bad credentials for user '{username}'"
             )
+        else:
+            if not self.bad_credentials_page:
+                error_html = DEFAULT_ERROR_HTML.format(username, proceed)
+            else:
+                with self.bad_credentials_page.open() as fd:
+                    error_html = fd.read().format(username, proceed)
+            return error_html

@@ -198,6 +198,19 @@ class TestWebApp(unittest.TestCase):
             self.assertEqual(rsp.exception._status_code, 401)
             self.assertEqual(rsp.exception.body, "Bad credentials for user 'user21'")
 
+    @unittest.skip("Boddle can't handle 'Content-type' headers other than 'application/json'")
+    def test_login_html_error(self):
+        """post_login with bad credentials returns an html error page"""
+        wa = odre.Odre(config=sample_config.split("\n"))
+        wa.userspace.validate_user = MagicMock(
+            name="validate_user()", return_value=("", False, None)
+        )
+        with boddle.boddle(
+            headers={"Content-type": "application/x-www-form-urlencoded"},
+            forms={"username": "user21", "password": "xyzzy", "proceed": "/url"},
+        ):
+            ret = wa.post_login()
+            self.assertEqual(ret, odre.DEFAULT_ERROR_HTML.format("user21", "/url"))
 
 if __name__ == "__main__":
     unittest.main()
