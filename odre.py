@@ -14,7 +14,7 @@ class BadUserspaceError(UserAppException):
     pass
 
 
-VERSION = "0.9.4"
+VERSION = "0.9.5"
 
 
 DEFAULT_LOGIN_HTML = """
@@ -271,8 +271,11 @@ class Odre(bottle.Bottle):
                     error_html = fd.read().format(username, proceed)
             return error_html
 
-    def post_logout():
+    def post_logout(self):
         _, _, uid, _ = self._get_session_data()
         if uid:
             self.userspace.kill_sessions(uid)
+
+        if self.cookie_name:
+            bottle.response.delete_cookie(self.cookie_name)
         bottle.redirect("/")

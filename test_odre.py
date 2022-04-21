@@ -214,6 +214,54 @@ class TestWebApp(unittest.TestCase):
             ret = wa.post_login()
             self.assertEqual(ret, odre.DEFAULT_ERROR_HTML.format("user21", "/url"))
 
+    def test_logout(self):
+        """post_logout calls kill_session"""
+        wa = odre.Odre(config=sample_config.split("\n"))
+        wa.userspace.check_key = MagicMock(
+            name="check_key()", return_value=(odre.OK, "user1", 24, None)
+        )
+        wa.userspace.kill_sessions = MagicMock(name="kill_sessions()")
+
+        with boddle.boddle(headers={"Cookie": "sample_session_id=skjasldkajd"}):
+            with self.assertRaises(odre.bottle.HTTPResponse) as rsp:
+                wa.post_logout()
+
+            self.assertIsNotNone(
+                re.search("^Location:", repr(rsp.exception), re.MULTILINE)
+            )
+            self.assertIsNotNone(
+                re.search(
+                    '^Set-Cookie: sample_session_id=""',
+                    repr(rsp.exception),
+                    re.MULTILINE,
+                )
+            )
+            wa.userspace.kill_sessions.assert_called_once()
+
+    def test_logout_with_bad_key(self):
+        """logout with a bad key doesn't kill session, but still redirects"""
+        wa = odre.Odre(config=sample_config.split("\n"))
+        wa.userspace.check_key = MagicMock(
+            name="check_key()", return_value=(odre.NOT_FOUND, None, None, None)
+        )
+        wa.userspace.kill_sessions = MagicMock(name="kill_sessions()")
+
+        with boddle.boddle(headers={"Cookie": "sample_session_id=skjasldkajd"}):
+            with self.assertRaises(odre.bottle.HTTPResponse) as rsp:
+                wa.post_logout()
+
+            self.assertIsNotNone(
+                re.search("^Location:", repr(rsp.exception), re.MULTILINE)
+            )
+            self.assertIsNotNone(
+                re.search(
+                    '^Set-Cookie: sample_session_id=""',
+                    repr(rsp.exception),
+                    re.MULTILINE,
+                )
+            )
+            wa.userspace.kill_sessions.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
