@@ -14,7 +14,7 @@ class BadUserspaceError(UserAppException):
     pass
 
 
-VERSION = "0.9.3"
+VERSION = "0.9.4"
 
 
 DEFAULT_LOGIN_HTML = """
@@ -64,6 +64,7 @@ DEFAULT_ERROR_HTML = """
 </html>
 """
 
+
 class Odre(bottle.Bottle):
     """
     Web Application class derived from Bottle that includes user
@@ -98,6 +99,7 @@ class Odre(bottle.Bottle):
 
         super().__init__(*args, **kwargs)
         self.route("/login", method="POST", callback=self.post_login)
+        self.route("/logout", method="POST", callback=self.post_logout)
 
         if isinstance(conf, ConfigParser):
             cp = conf
@@ -141,10 +143,9 @@ class Odre(bottle.Bottle):
 
         self.config = cp
 
-    def _get_session_data(self):
+    def _get_session_key(self):
         """
-        Get the data associated to the session: username, userid, and
-        any extra data associated to the session
+        Get the session key from the request
         """
         key = ""
         if self.cookie_name:
@@ -153,7 +154,14 @@ class Odre(bottle.Bottle):
             auth_hdr = bottle.request.headers.get("Authorization", "")
             if auth_hdr.startswith("Bearer"):
                 key = auth_hdr.split(" ")[1]
+        return key
 
+    def _get_session_data(self):
+        """
+        Get the data associated to the session: username, userid, and
+        any extra data associated to the session
+        """
+        key = self._get_session_key()
         if key:
             return self.userspace.check_key(key)
         return NOT_FOUND, "", 0, None
@@ -235,8 +243,9 @@ class Odre(bottle.Bottle):
 
         the_host = forwarded_host or our_host
         the_protocol = forwarded_protocol or our_protocol
-        if ((the_protocol == "http" and forwarded_port == "80")
-          or (the_protocol == "https" and forwarded_port == "443")):
+        if (the_protocol == "http" and forwarded_port == "80") or (
+            the_protocol == "https" and forwarded_port == "443"
+        ):
             the_port = ""
         else:
             the_port = f":{forwarded_port}"
@@ -261,3 +270,9 @@ class Odre(bottle.Bottle):
                 with self.bad_credentials_page.open() as fd:
                     error_html = fd.read().format(username, proceed)
             return error_html
+
+    def post_logout():
+        _, _, uid, _ = self._get_session_data()
+        if uid:
+            self.userspace.kill_sessions(uid)
+        bottle.redirect("/")
