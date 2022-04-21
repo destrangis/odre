@@ -262,6 +262,84 @@ class TestWebApp(unittest.TestCase):
             )
             wa.userspace.kill_sessions.assert_not_called()
 
+    def test_change_password_with_good_password(self):
+        """Change password can change password"""
+        wa = odre.Odre(config=sample_config.split("\n"))
+        wa.userspace.check_key = MagicMock(
+            name="check_key()", return_value=(odre.OK, "user1", 24, None)
+        )
+        wa.userspace.change_password = MagicMock(
+            name="change_password()", return_value=odre.OK
+        )
+        expected = dict(rc=200, text="OK", message="Password changed")
+
+        with boddle.boddle(
+            headers={
+                "Content-type": "application/json",
+                "Cookie": "sample_session_id=skjasldkajd",
+            },
+            json={
+                "oldpassword": "xyzzy",
+                "newpassword1": "wersaser",
+                "newpassword2": "wersaser",
+            },
+        ):
+            result = wa.post_change_password()
+
+        self.assertEqual(result, expected)
+
+    def test_change_password_with_bad_password(self):
+        """Change password with bad oldpassword throws error 401"""
+        wa = odre.Odre(config=sample_config.split("\n"))
+        wa.userspace.check_key = MagicMock(
+            name="check_key()", return_value=(odre.OK, "user1", 24, None)
+        )
+        wa.userspace.change_password = MagicMock(
+            name="change_password()", return_value=odre.REJECTED
+        )
+
+        with boddle.boddle(
+            headers={
+                "Content-type": "application/json",
+                "Cookie": "sample_session_id=skjasldkajd",
+            },
+            json={
+                "oldpassword": "xyzzy",
+                "newpassword1": "wersaser",
+                "newpassword2": "wersaser",
+            },
+        ):
+            with self.assertRaises(odre.bottle.HTTPError) as rsp:
+                result = wa.post_change_password()
+
+            self.assertEqual("401 Unauthorized", rsp.exception.status)
+
+    def test_change_password_with_nonmatching_new_passwords(self):
+        """Change passwords with non-matching keys throw error 400"""
+        wa = odre.Odre(config=sample_config.split("\n"))
+        wa.userspace.check_key = MagicMock(
+            name="check_key()", return_value=(odre.OK, "user1", 24, None)
+        )
+        wa.userspace.change_password = MagicMock(
+            name="change_password()", return_value=odre.REJECTED
+        )
+
+        with boddle.boddle(
+            headers={
+                "Content-type": "application/json",
+                "Cookie": "sample_session_id=skjasldkajd",
+            },
+            json={
+                "oldpassword": "xyzzy",
+                "newpassword1": "wersasen",
+                "newpassword2": "wersaser",
+            },
+        ):
+            with self.assertRaises(odre.bottle.HTTPError) as rsp:
+                result = wa.post_change_password()
+
+            self.assertEqual("400 Bad Request", rsp.exception.status)
+
 
 if __name__ == "__main__":
     unittest.main()

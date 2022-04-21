@@ -3,7 +3,7 @@ from configparser import ConfigParser
 
 import bottle
 
-from pgusers import UserSpace, OK, NOT_FOUND
+from pgusers import UserSpace, OK, NOT_FOUND, REJECTED
 
 
 class UserAppException(Exception):
@@ -14,7 +14,7 @@ class BadUserspaceError(UserAppException):
     pass
 
 
-VERSION = "0.9.5"
+VERSION = "0.9.6"
 
 
 DEFAULT_LOGIN_HTML = """
@@ -100,6 +100,7 @@ class Odre(bottle.Bottle):
         super().__init__(*args, **kwargs)
         self.route("/login", method="POST", callback=self.post_login)
         self.route("/logout", method="POST", callback=self.post_logout)
+        self.route("/changepassword", method="POST", callback=self.post_change_password)
 
         if isinstance(conf, ConfigParser):
             cp = conf
@@ -272,6 +273,7 @@ class Odre(bottle.Bottle):
             return error_html
 
     def post_logout(self):
+        """callback for the /logout route"""
         _, _, uid, _ = self._get_session_data()
         if uid:
             self.userspace.kill_sessions(uid)
@@ -279,3 +281,35 @@ class Odre(bottle.Bottle):
         if self.cookie_name:
             bottle.response.delete_cookie(self.cookie_name)
         bottle.redirect("/")
+
+    def post_change_password(self):
+        """callback for the /changepassword route"""
+        content_type = bottle.request.headers["Content-type"]
+
+        if content_type == "application/json":
+            json_used = True
+            jsn = bottle.request.json
+            oldpassword = jsn.get("oldpassword", "")
+            newpassword1 = jsn.get("newpassword1", "")
+            newpassword2 = jsn.get("newpassword2", "")
+        else:
+            json_used = False
+            oldpassword = bottle.request.forms.get("oldpassword", "")
+            newpassword1 = bottle.request.forms.get("newpassword1", "")
+            newpassword2 = bottle.request.forms.get("newpassword2", "")
+
+        rc, username, userid, _ = self._get_session_data()
+        if rc != OK:
+            self.post_logout()
+
+        if newpassword1 != newpassword2:
+            raise bottle.HTTPError(status=400, body="New passwords don't match")
+
+        rc = self.userspace.change_password(userid, newpassword1, oldpassword)
+        if rc == REJECTED:
+            raise bottle.HTTPError(status=401, body="Bad old password")
+
+        if rc == NOT_FOUND:
+            self.post_logout()
+
+        return dict(rc=200, text="OK", message="Password changed")
