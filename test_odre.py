@@ -100,10 +100,10 @@ class TestWebApp(unittest.TestCase):
         """request to authenticated method returns the default login page"""
         callback = MagicMock("wrapped function")
         wa = odre.Odre(config=sample_config.split("\n"))
-        with boddle.boddle():
+        with boddle.boddle(url="http://server.com/"):
             authfunc = wa.authenticated(callback)
             def_login = authfunc()
-            self.assertEqual(odre.DEFAULT_LOGIN_HTML.format(None), def_login)
+            self.assertEqual(odre.DEFAULT_LOGIN_HTML.format("http://server.com/"), def_login)
 
     def test_authenticated_cookie_name(self):
         """authenticated method with cookie set results in method called"""

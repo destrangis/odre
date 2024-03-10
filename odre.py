@@ -14,7 +14,7 @@ class BadUserspaceError(UserAppException):
     pass
 
 
-VERSION = "0.9.6"
+VERSION = "0.9.7"
 
 
 DEFAULT_LOGIN_HTML = """
@@ -182,8 +182,8 @@ class Odre(bottle.Bottle):
             if rc == OK:
                 return callback(*args, **kwargs)
 
-            path_info = bottle.request.environ.get("PATH_INFO")
-            return self.login(path_info)
+            url = bottle.request.url
+            return self.login(url)
 
         return wrapper
 
@@ -222,40 +222,25 @@ class Odre(bottle.Bottle):
         authentication and, if successful, redirects to proceed.
         """
         content_type = bottle.request.headers["Content-type"]
+        url = bottle.request.url
 
         if content_type == "application/json":
             json_used = True
             jsn = bottle.request.json
             username = jsn.get("username", "")
             password = jsn.get("password", "")
-            proceed = jsn.get("proceed", "/")
+            proceed = jsn.get("proceed", url)
         else:
             json_used = False
             username = bottle.request.forms.get("username", "")
             password = bottle.request.forms.get("password", "")
-            proceed = bottle.request.forms.get("proceed", "/")
+            proceed = bottle.request.forms.get("proceed", url)
 
-        our_host = bottle.request.environ.get("HTTP_HOST", "localhost")
-        our_protocol = bottle.request.get("wsgi.url_scheme", "http")
-        # if behind reverse proxy, get the headers
-        forwarded_protocol = bottle.request.environ.get("HTTP_X_FORWARDED_PROTO", "")
-        forwarded_host = bottle.request.environ.get("HTTP_X_FORWARDED_HOST", "")
-        forwarded_port = bottle.request.environ.get("HTTP_X_FORWARDED_PORT", "")
-
-        the_host = forwarded_host or our_host
-        the_protocol = forwarded_protocol or our_protocol
-        if (the_protocol == "http" and forwarded_port == "80") or (
-            the_protocol == "https" and forwarded_port == "443"
-        ):
-            the_port = ""
-        else:
-            the_port = f":{forwarded_port}"
-
-        target = f"{the_protocol}://{the_host}{the_port}{proceed}"
+        target = proceed
 
         key, admin, uid = self.userspace.validate_user(username, password, extra)
         if key and self.cookie_name:
-            bottle.response.set_cookie(self.cookie_name, key)
+            bottle.response.set_cookie(self.cookie_name, key, path="/", samesite="lax")
             bottle.redirect(target)
 
         if key:
