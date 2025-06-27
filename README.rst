@@ -2,12 +2,12 @@
 Odre
 ====
 
-Bottle extension class that provides user authentication based on the ``pgusers`` module.
+Bottle plugin class that provides user authentication based on the ``pgusers`` module.
 
 Usage
 -----
 
-You just need to import the ``Odre`` object, configure it and then use the ``@authenticated`` decorator on any route you'd like authenticated:
+You just need to import the ``Odre`` object, and use Bottle's ``install`` method to install an authentication wrapper to all the routes whose callback users the ``userinfo`` (or the keyword specified) parameter:
 
 .. code-block:: python
 
