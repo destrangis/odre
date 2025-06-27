@@ -11,16 +11,16 @@ You just need to import the ``Odre`` object, configure it and then use the ``@au
 
 .. code-block:: python
 
-    from odre import Odre
+    sample = bottle.Bottle()
 
-    sample = Odre()
+    authenticated = Odre(config=config.split("\n"), keyword="userinfo")
+    sample.install(authenticated)
 
     @sample.get("/hello/<name>")
-    @sample.authenticated
-    def hello(name):
-        return f"<p>Hello <b>{name}</b></p>"
+    def hello(name, userinfo):
+        return f"<p>Hello <b>{name} {userinfo}</b></p>"
 
-In the example above, when the route ``/hello/<name>`` is accessed for the first time, the user is shown a login form asking for credentials. Upon successful authentication, the user is supplied a token that is set either in a cookie or the client should supply it in the form of an ``Authorization: Bearer <token>`` header.
+In the example above, when the route ``/hello/<name>`` is accessed for the first time, the user is shown a login form asking for credentials. Upon successful authentication, the user is supplied a token that is set either in a cookie or the client should supply it in the form of an ``Authorization: Bearer <token>`` header. The function is then injected the user information in the ```userinfo``` argument.
 
 .. _configuration:
 
@@ -45,6 +45,12 @@ The configuration is an .ini file similar to the following example:
 
     [userspace]
     name = SAMPLE
+    # SAMPLE is a different database than the app database and it possibly
+    # has different user, host, port etc.
+    host = localhost
+    port = 5432
+    user = sampleuser
+    password = sampleuser
 
     [smtp]
     host = mailhost.domain.com
@@ -65,15 +71,23 @@ The [userspace] section
 ~~~~~~~~~~~~~~~~~~~~~~~
 :name:
   The name of the ``pgusers`` userspace. A *userspace*, is a PostgreSQL database that contains the users and sessions and is handled by the ``pgusers`` module.
+:host:
+  The host where the userspace resides. If omitted, a local connection through a unix-domain socket is assumed.
+:port:
+  The port where PostgreSQL userspace listens. If omitted, Postgres default port 5432 is assumed.
+:user:
+  The PostgreSQL user for the userspace.
+:password:
+  The password for the PostgreSQL user for the userspace.
 
 The [database] section
 ~~~~~~~~~~~~~~~~~~~~~~
-This section contains the parameters needed to connect to a PostgreSQL server. The fields are the same as those used to create a connection on the ``psycopg2`` module.
+This section contains the parameters needed to connect to the app database. The fields are the same as those used to create a connection on the ``psycopg2`` module.
 
 :host:
   The host where the PostgreSQL resides. If omitted, a local connection through a unix-domain socket is assumed.
 :port:
-  The port where PostgreSQL listes. If omitted, Postgres default port 5432 is assumed.
+  The port where PostgreSQL listens. If omitted, Postgres default port 5432 is assumed.
 :user:
   The PostgreSQL user.
 :password:
@@ -87,16 +101,17 @@ This section contains the SMTP server parameters to send the user a *reset passw
 The API
 -------
 
-``app = Odre(config=None)``
+``app = Odre(config, keyword="userinfo", prefix="")``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This is the class constructor. ``Odre`` is a subclass of ``Bottle``, so all
-of bottle's functionality can be used, but there will be some additional methods
-as well as a pre-installed ``/login`` route. The optional parameter ``config`` to
-the ``Odre`` class can be used to specify the app configuration_. It can be:
+This is the class constructor. ``Odre`` is a plugin for ``Bottle`` The parameter ``config`` can be used to specify the app configuration_. It can be:
 
 - A string, which is interpreted as a filename
+- A ConfigParser object
 - Any iterable yielding strings, e.g. a file-like object
+
+The ``keyword`` parameter is the name of the variable that will be injected with the user information on authenticated routes.
+The ``prefix`` parameter is an optional prefix for the routes that will be installed. E.g. if for any reason it's not desired to use ``/login`` as a route, we can give a value to prefix, for instance ``prefix = "/odre"`` so that the login function will be installed on ``/odre/login``.
 
 ``@app.authenticated``
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -113,34 +128,6 @@ basic, default login page. Example:
     @app.authenticated
     def hello(name):
         return f"<p>Hello <b>{name}</b></p>"
-
-``app.configure(cp)``
-~~~~~~~~~~~~~~~~~~~~~
-This method configures the ``Odre`` object if the ``config`` parameter was not
-specified in the constructor.
-
-The argument ``cp`` must be  ``ConfigParser`` object from the ``configparser``
-module from the standard library, with the format specified in the configuration_
-section above.
-
-``app.get_user_data()``
-~~~~~~~~~~~~~~~~~~~~~~~
-If the user has presented a valid session token, this method can be used to
-retrieve information about the user. The result is a dictionary containing
-the different fields. Example:
-
-.. code-block:: python
-
-    @app.get("/hello/<name>")
-    @authenticated
-    def hello(name):
-        udata = app.get_user_data()
-        return f"""<p>Hello {name}, I know you are {udata['username']},
-                   your email is {udata['email']},
-                   you {"are" if udata['admin'] else "aren't"} an administrator,
-                   your user data is: {pformat(udata['extra_data'])}
-                   your session data is: {pformat(udata['session_data'])}</p>"""
-
 
 The ``/login`` pre-installed route
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
