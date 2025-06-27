@@ -5,13 +5,21 @@ root_dir = /opt/webapp/dir
 login_page = /opt/webapp/dir/html/login.html
 
 [database]
+# the database used by the application
 #host = localhost
 #port = 5432
 user = sampleuser
 password = sampleuser
 
 [userspace]
-name = SAMPLEAPP
+# userspace - the database to authenticate users against
+# always use these names
+dbname = SAMPLEAPP
+# the user is the user that can read/write the SAMPLEAPP database
+user = sampleuser
+password = sampleuser
+#host = localhost
+#port = 5432
 
 [smtp]
 host = mailhost.zen.co.uk

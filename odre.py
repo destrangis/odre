@@ -1,4 +1,5 @@
 import pathlib
+import inspect
 from configparser import ConfigParser
 
 import bottle
@@ -13,8 +14,11 @@ class UserAppException(Exception):
 class BadUserspaceError(UserAppException):
     pass
 
+class PluginError(Exception):
+    pass
 
-VERSION = "0.9.7"
+
+VERSION = "0.9.9"
 
 
 DEFAULT_LOGIN_HTML = """
@@ -65,57 +69,79 @@ DEFAULT_ERROR_HTML = """
 """
 
 
-class Odre(bottle.Bottle):
+class Odre:
     """
-    Web Application class derived from Bottle that includes user
+    Middleware class that includes user
     authentication based on the pgusers module.
-
-    All Odre instances include a /login route that performs the
-    user authentication.
-
-    The class also provides an 'authenticated' decorator to do the
-    authentication automatically, e.g:
-
-    myapp = Odre(userspace=usp)
-    @myapp.get("/books/<bookid>")
-    @myapp.authenticated
-    def get_books(bookid)
-        ...
     """
 
-    def __init__(self, *args, **kwargs):
+    name = "odre"
+    api = 2
+
+    # framework_init = {
+        # "bottle": self.add_bottle_routes,
+        # "fastapi": lambda: None,
+        # }
+
+    def __init__(self, config, keyword="userinfo", prefix=""):
         """
         Initialises an Odre object
 
         Optional keyword arguments:
         config - Either a filename (str), or an iterable yielding
                  strings (e.g. an open file) a ConfigParser object, or None
+        keyword - plugin keyword.
+        prefix - prefix to add to the pre-defined api entry points. Your
+                 html forms must use the with this prefix in the 'action'
+                 attribute.
 
         if config is not given, the app must be configured using the
         configure() method
+
+        odre = Odre(fw_type="bottle")
         """
         cp = None
-        conf = kwargs.pop("config", None)
+        self.keyword = keyword
+        self.prefix = prefix
 
-        super().__init__(*args, **kwargs)
-        self.route("/login", method="POST", callback=self.post_login)
-        self.route("/logout", method="POST", callback=self.post_logout)
-        self.route("/changepassword", method="POST", callback=self.post_change_password)
-
-        if isinstance(conf, ConfigParser):
-            cp = conf
-        elif isinstance(conf, str):  # conf is a filename
+        if isinstance(config, ConfigParser):
+            cp = config
+        elif isinstance(config, str):  # conf is a filename
             cp = ConfigParser()
-            p = pathlib.Path(conf)
+            p = pathlib.Path(config)
             with p.open() as cf:
                 cp.read_file(cf)
-        elif conf is not None:
+        elif isinstance(config, dict):  # dictionary of the form
+             cp = config                # { "userspace": { "dbname": "XXX",
+                                        #                   "user": "YYY",
+                                        #                   "password": "ZZZ",
+                                        #                   "host": "UUU",
+                                        #                   "port": "VVV"}}
+        elif config is not None:
             # conf is a file like object or iterable yielding strings
+            #  with the format of an .ini file
             cp = ConfigParser()
-            cp.read_file(conf)
+            cp.read_file(config)
 
         if cp:
             self.configure(cp)
+
+    def setup(self, app):
+
+        for other in app.plugins:
+            if not isinstance(other, Odre): continue
+            if other.keyword == self.keyword:
+                raise PluginError("Found another Odre plugin with "
+                f"conflicting settings (non-unique keyword '{self.keyword}').")
+
+        # fw_init_method = framework_init.get(fw_type, lambda: None)
+        # fw_init_method()
+        self.add_bottle_routes(app)
+
+    def add_bottle_routes(self, app):
+        app.route(self.prefix + "/login", method="POST", callback=self.bottle_post_login, skip=[Odre])
+        app.route(self.prefix + "/logout", method="POST", callback=self.bottle_post_logout, skip=[Odre])
+        app.route(self.prefix + "/changepassword", method="POST", callback=self.bottle_post_change_password, skip=[Odre])
 
     def configure(self, cp):
         """
@@ -128,21 +154,22 @@ class Odre(bottle.Bottle):
         self.appname = appsection["name"]
         self.cookie_name = appsection.get("cookie_name", None)
         self.root_dir = pathlib.Path(appsection["root_dir"])
-        self.login_page = None
         lf = appsection.get("login_page")
         if lf:
             self.login_page = pathlib.Path(lf)
-        self.bad_credentials_page = None
+        else:
+            self.login_page = None
+
         ep = appsection.get("bad_credentials_page")
         if ep:
             self.bad_credentials_page = pathlib.Path(ep)
+        else:
+            self.bad_credentials_page = None
 
-        database = cp["database"]
         userspace = cp["userspace"]
-        usname = userspace["name"]
-        self.userspace = UserSpace(usname, **database)
+        self.userspace = UserSpace(**userspace)
 
-        self.config = cp
+        self.odre_config = cp
 
     def _get_session_key(self):
         """
@@ -167,19 +194,27 @@ class Odre(bottle.Bottle):
             return self.userspace.check_key(key)
         return NOT_FOUND, "", 0, None
 
-    def authenticated(self, callback):
+    def apply(self, callback, route):
         """
-        Decorator that checks whether the user is authenticated.
+        Apply a decorator that checks whether the user is authenticated.
 
         If the request sends the expected cookie with the session key, or
         if it sends an "Authorization: Bearer <key>" header, it will check
         the validity of the key prior to running the callback.
         If not valid, the login method is called.
         """
+        keyword = self.keyword
+
+        # Test if the original callback accepts the keyword.
+        # Ignore it if it does not need a database handle.
+        args = inspect.signature(route.callback).parameters
+        if keyword not in args:
+            return callback
 
         def wrapper(*args, **kwargs):
-            (rc, uname, uid, data) = self._get_session_data()
-            if rc == OK:
+            udata = self.get_user_data()
+            if udata is not None:
+                kwargs[keyword] = udata
                 return callback(*args, **kwargs)
 
             url = bottle.request.url
@@ -214,7 +249,7 @@ class Odre(bottle.Bottle):
 
         return loginhtml.format(path)
 
-    def post_login(self, extra=None):
+    def bottle_post_login(self, extra=None):
         """
         Callback for the /login route.
 
@@ -257,7 +292,7 @@ class Odre(bottle.Bottle):
                     error_html = fd.read().format(username, proceed)
             return error_html
 
-    def post_logout(self):
+    def bottle_post_logout(self):
         """callback for the /logout route"""
         _, _, uid, _ = self._get_session_data()
         if uid:
@@ -267,7 +302,7 @@ class Odre(bottle.Bottle):
             bottle.response.delete_cookie(self.cookie_name)
         bottle.redirect("/")
 
-    def post_change_password(self):
+    def bottle_post_change_password(self):
         """callback for the /changepassword route"""
         content_type = bottle.request.headers["Content-type"]
 

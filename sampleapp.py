@@ -1,4 +1,4 @@
-from bottle import run
+import bottle
 from odre import Odre
 
 config = """
@@ -15,20 +15,27 @@ user = sampleuser
 password = sampleuser
 
 [userspace]
-name = SAMPLE
+dbname = main
+# the user is the user that can read/write the SAMPLE database
+user = sampleuser
+password = sampleuser
+host = localhost
+port = 5432
 
 [smtp]
 host = mailhost.zen.co.uk
 port = 465
 """
 
-sample = Odre(config=config.split("\n"))
+sample = bottle.Bottle()
+
+authenticated = Odre(config=config.split("\n"), keyword="userinfo")
+sample.install(authenticated)
 
 
 @sample.get("/hello/<name>")
-@sample.authenticated
-def hello(name):
-    return f"<p>Hello <b>{name}</b></p>"
+def hello(name, userinfo):
+    return f"<p>Hello <b>{name} {userinfo}</b></p>"
 
 
 @sample.get("/")
@@ -37,4 +44,4 @@ def main():
 
 
 if __name__ == "__main__":
-    run(sample)
+    bottle.run(sample)
